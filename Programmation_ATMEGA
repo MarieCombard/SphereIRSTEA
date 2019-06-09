@@ -1,0 +1,99 @@
+/*
+	@file Gestion_Temperature.c
+	@author COMBARD Marie
+	Commencé le 10/04/2019
+	Projet Sphère d'étalonnage, BTS SN Option Electronique et Communications, Promotion 2019
+    Lycée LAFAYETTE, Clermont-Ferrand
+
+*/
+#define F_CPU  1000000
+
+#include <asf.h>
+#include <util/delay.h>
+#include <uart.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include "i2cmaster.h"
+
+#define Reg_Temperature 5
+#define baudRate 9600 
+#define MCP9808 0x30 // adresse du capteur de température 
+uint16_t Resultat;
+
+uint16_t Lecture_temperature(void);
+void pwm_init(void);
+
+float Temperature;
+uint8_t Dizaine, Unite;
+
+int main (void)
+{
+	
+	board_init();
+	pwm_init(); 
+	i2c_init();
+	uart_init( UART_BAUD_SELECT_DOUBLE_SPEED(baudRate,F_CPU) );
+	sei();
+	OCR2A = 50;
+	while(1)
+	{
+		   // OCR2A = OCR2A + 4;
+			Resultat = Lecture_temperature();
+			Temperature =  Resultat * 0.0625;
+			if (Temperature > 28)
+			{
+				PORTA = PORTA | 0b10000000; //allume le ventilateur
+			}
+			else
+			{
+				PORTA = PORTA & 0b01111111; //éteint le ventilateur
+			}
+			if(Temperature > 0 ) // Conversion de Temperature en chaîne de caractère pour l'envoyer sur liaison série
+			{
+				uart_putc('+');
+			}
+			else
+			{
+				uart_putc('-');
+				Temperature = - Temperature; // Besoin que le résultat soit positif pour la conversion en chaîne de caractère
+			}	
+			Dizaine = '0';
+			while(Temperature >=10)
+			{
+				Dizaine ++;
+				Temperature = Temperature -10;
+			}
+			uart_putc(Dizaine);
+			Unite = '0';
+			while(Temperature >=1)
+			{
+				Unite ++;
+				Temperature = Temperature -1;
+			}
+			uart_putc(Unite);
+			_delay_ms(1000); //attendre 1 seconde avant de relancer l'acquisition de température
+			PINA = PINA | 0x04; //inverser l'etat de la led
+	}
+
+}
+
+
+uint16_t Lecture_temperature(void)
+{ 
+	uint16_t Locale_Temp;
+	
+	i2c_start(MCP9808 +I2C_WRITE);
+	i2c_write(Reg_Temperature);
+	i2c_rep_start(MCP9808 +I2C_READ);
+	Locale_Temp = i2c_readAck();
+	Locale_Temp = Locale_Temp << 8;
+	Locale_Temp = Locale_Temp | i2c_readNak();
+	Locale_Temp = Locale_Temp & 0b0001111111111111;
+	
+	return Locale_Temp;
+} 
+void pwm_init(void)
+{
+	TCCR2A = (1 << COM2A1) | (1 << WGM20) | (1 << WGM21); //Fast PWM, mode non inversé sur OC2A
+	TCCR2B = (1 << CS20);
+}
