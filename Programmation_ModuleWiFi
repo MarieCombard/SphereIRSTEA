@@ -1,0 +1,85 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+ 
+const char *ssid = "Temperature";
+const char *password = "password";
+static char temperature[3];
+uint8_t Compteur, PWM; 
+ESP8266WebServer server(80);
+char Caractere;
+bool Temp_OK;
+int pinGPIO16 = 16;
+
+String getPage()
+{
+  String page = " <html lang=fr><head><meta charset=utf-8><meta http-equiv=refresh content=1> ";
+  page +=  "<title>ESP8266 test</title>";
+  page += "<style> body { background-color: #fffff; font-family: Arial, Helvetica, Sans-Serif; Color: #000088; }</style>";
+  page += "</head><body><h1>Sphère d'étalonnage</h1>";
+  page += "<h2> Température de la sphère :  ";
+  page += temperature ; /* mettre ici la chaîne de caractère récupérée sur la liaison série" */
+  page += " °C </h2>";
+  return page;
+}
+
+void handleRoot() 
+{
+  server.send(200, "text/html",getPage());
+}
+
+
+void setup() 
+{
+ 
+  Serial.begin(9600);
+  pinMode(pinGPIO16, OUTPUT);
+ 
+  WiFi.softAP(ssid, password);
+ 
+  Serial.println();
+  Serial.print("Server IP address: ");
+  Serial.println(WiFi.softAPIP());
+  Serial.print("Server MAC address: ");
+  Serial.println(WiFi.softAPmacAddress());
+ 
+  server.on("/", handleRoot);
+  server.begin();
+  Compteur = 0;
+  Serial.println("Server listening");
+  Temp_OK =  false;
+}
+ 
+void loop() 
+{
+  
+  server.handleClient();
+   if(Serial.available()>0)    //Checks is there any data in buffer 
+   {
+    Caractere = char(Serial.read());
+     if(Caractere == '+' || Caractere == '-')
+     {
+        temperature[0] = Caractere;
+        Compteur = 1;
+     }
+      else
+      {
+           if(Compteur == 2)
+           {
+                temperature[2] = Caractere;
+                Compteur = 0;
+                Temp_OK = true;
+           }
+           if(Compteur == 1)
+           {
+                temperature[1] = Caractere;
+                Compteur = 2;
+           }
+       }
+  }
+  if(Temp_OK == true)
+  {
+    Temp_OK = false;
+  }
+
+  digitalWrite(pinGPIO16, LOW);
+}
